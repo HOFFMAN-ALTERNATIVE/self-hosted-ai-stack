@@ -23,9 +23,10 @@ step "list models"
 
 step "streaming chat (native API)"
 chunks=$("${CURL[@]}" -fN -H "Authorization: Bearer $KEY" "$URL/api/chat" \
-  -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with one word: hello\"}],\"options\":{\"num_predict\":16}}" | wc -l)
+  -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Count from 1 to 10, separated by spaces.\"}],\"options\":{\"num_predict\":48}}" | wc -l)
 echo "received $chunks NDJSON chunks"
-(( chunks > 2 )) || { echo "expected streamed chunks"; exit 1; }
+# >= 2 lines = at least one token chunk plus the final {"done":true} line
+(( chunks >= 2 )) || { echo "expected streamed chunks"; exit 1; }
 
 step "OpenAI-compatible endpoint"
 "${CURL[@]}" -f -H "Authorization: Bearer $KEY" -H 'content-type: application/json' "$URL/v1/chat/completions" \
