@@ -1,0 +1,61 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+defaults:
+  run:
+    shell: bash
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: gateway/pyproject.toml }
+      - run: pip install -e ".[dev]"
+      - run: ruff check . && ruff format --check .
+      - run: mypy app tests
+      - run: pytest -q
+
+  config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env && docker compose config --quiet && docker compose --profile ui -f compose.yml -f compose.gpu.yml config --quiet
+      - run: docker run --rm -v "$PWD/caddy:/etc/caddy:ro" -e CHAT_DOMAIN=chat.localhost -e API_DOMAIN=api.localhost -e ACME_EMAIL=a@example.com caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile
+      - run: shellcheck scripts/*.sh
+
+  e2e:
+    needs: [gateway, config]
+    runs-on: ubuntu-latest
+    env:
+      CHAT_DOMAIN: chat.localhost
+      API_DOMAIN: api.localhost
+      OLLAMA_MODELS: qwen2.5:0.5b
+      E2E_MODEL: qwen2.5:0.5b
+      WEBUI_SECRET_KEY: ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate API key
+        run: |
+          KEY="sk-ci-$(openssl rand -hex 16)"
+          echo "::add-mask::$KEY"
+          echo "E2E_API_KEY=$KEY" >> "$GITHUB_ENV"
+          echo "API_KEY_HASHES=$(printf '%s' "$KEY" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_ENV"
+      - name: Build images
+        run: docker compose build
+      - name: Start stack (CPU only)
+        run: |
+          docker compose up -d ollama
+          docker compose run --rm model-puller
+          docker compose up -d --wait --wait-timeout 180 gateway caddy
+      - run: ./scripts/e2e.sh
+      - if: failure()
+        run: docker compose ps -a && docker compose logs --tail=100
+      - if: always()
+        run: docker compose down -v
