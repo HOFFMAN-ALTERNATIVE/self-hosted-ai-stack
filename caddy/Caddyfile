@@ -1,0 +1,33 @@
+{
+	email {$ACME_EMAIL}
+	# Uncomment for testing to avoid Let's Encrypt rate limits:
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+(security) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	encode zstd gzip
+}
+
+# Chat UI
+{$CHAT_DOMAIN} {
+	import security
+	reverse_proxy open-webui:8080
+}
+
+# API gateway (API-key protected, streaming)
+{$API_DOMAIN} {
+	import security
+	reverse_proxy gateway:8080 {
+		flush_interval -1
+		transport http {
+			read_timeout 10m
+		}
+	}
+}
