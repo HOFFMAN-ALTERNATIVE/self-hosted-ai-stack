@@ -31,6 +31,26 @@ PROXIED = {
 HOP_BY_HOP = {"connection", "keep-alive", "transfer-encoding", "content-length", "content-encoding"}
 
 
+async def read_capped_body(request: Request, limit: int) -> bytes:
+    """Read the request body, stopping as soon as it exceeds ``limit`` bytes.
+
+    ``request.body()`` would buffer the whole upload before any size check, so a client
+    could make the gateway hold an arbitrarily large body in memory.
+    """
+    too_large = HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Request body too large")
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        raise too_large
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise too_large
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def create_app(
     settings: Settings | None = None, transport: httpx.AsyncBaseTransport | None = None
 ) -> FastAPI:
@@ -83,9 +103,7 @@ def create_app(
         if (request.method, path) not in PROXIED:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
 
-        body = await request.body()
-        if len(body) > s.max_body_bytes:
-            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Request body too large")
+        body = await read_capped_body(request, s.max_body_bytes)
         if body and s.models:
             try:
                 payload: Any = json.loads(body)

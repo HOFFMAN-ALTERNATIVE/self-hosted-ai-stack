@@ -136,6 +136,16 @@ async def test_body_limit() -> None:
         assert r.status_code == 413
 
 
+async def test_body_limit_applies_to_chunked_uploads_without_content_length() -> None:
+    async def chunks() -> AsyncIterator[bytes]:
+        for _ in range(100):
+            yield b"x" * 10
+
+    async with make_client(make(max_body_bytes=50)) as c:
+        r = await c.post("/api/chat", content=chunks(), headers=AUTH)
+        assert r.status_code == 413
+
+
 async def test_rate_limit_returns_429() -> None:
     async with make_client(make(rate_limit_rpm=1, rate_limit_burst=2)) as c:
         codes = [(await c.get("/api/tags", headers=AUTH)).status_code for _ in range(3)]

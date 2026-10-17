@@ -7,17 +7,17 @@
 ![CPU](https://img.shields.io/badge/runs%20on-CPU%20only-blueviolet)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-**Your own private ChatGPT-style stack on a plain VPS — no GPU, no cloud API bills, no data leaving the server.**
+A private ChatGPT-style stack on a plain CPU-only VPS: no GPU, no cloud API bills, no prompts leaving the server.
 
-Ollama · Open WebUI · a hardened FastAPI **API gateway** (API keys, rate limiting, streaming proxy, model allow-list) · Caddy with automatic HTTPS.
+Ollama · Open WebUI · a FastAPI API gateway (API keys, rate limiting, streaming proxy, model allow-list) · Caddy with automatic HTTPS.
 
 ## Why
 
-Ollama's API has **no authentication** — exposing it directly is a common and costly mistake. This stack keeps Ollama private and
-puts a small, tested gateway in front of it so apps can use local models over HTTPS exactly like a hosted API
-(native Ollama **and** OpenAI-compatible endpoints), while humans get a polished chat UI.
+Ollama's API has no authentication, and exposing it directly is a common and costly mistake. This stack keeps Ollama on a private network and puts a small, tested gateway in front of it, so apps can call local models over HTTPS like a hosted API (native Ollama and OpenAI-compatible endpoints) while people get a chat UI.
 
-CI boots the real stack on a CPU-only runner, pulls a real model and streams completions **through Caddy TLS → gateway → Ollama** on every push.
+CI boots the real stack on a CPU-only runner, pulls a real model and streams completions through Caddy TLS, the gateway and Ollama on every push.
+
+The trade-off is speed. On CPU, small quantised models (1.5B to 8B parameters) are usable for chat and internal tools, and far slower than a GPU or a hosted API. See the tuning notes below before promising latency to anyone.
 
 ## Architecture
 
@@ -51,11 +51,11 @@ sequenceDiagram
 ## Gateway features
 
 - **API keys** stored only as SHA-256 hashes (`API_KEY_HASHES`), accepted as `Authorization: Bearer` or `x-api-key`, compared in constant time
-- **Rate limiting** — token bucket per key (`RATE_LIMIT_RPM`, `RATE_LIMIT_BURST`) with `Retry-After`
-- **Streaming proxy** — raw byte streaming with proxy buffering disabled, works for NDJSON and SSE
-- **Endpoint allow-list** — inference endpoints only; `pull`, `delete`, `create`, `copy`, `push` are unreachable
-- **Model allow-list** (`ALLOWED_MODELS`) and request body limit
-- **Health** — `/healthz` reports Ollama version, 503 when upstream is down
+- **Rate limiting:** token bucket per key (`RATE_LIMIT_RPM`, `RATE_LIMIT_BURST`) with `Retry-After`
+- **Streaming proxy:** raw byte streaming with proxy buffering disabled, works for NDJSON and SSE
+- **Endpoint allow-list:** inference endpoints only; `pull`, `delete`, `create`, `copy`, `push` are unreachable
+- **Model allow-list** (`ALLOWED_MODELS`) and a request body limit enforced while streaming the upload, so oversized bodies are rejected without being buffered
+- **Health:** `/healthz` reports Ollama version, 503 when upstream is down
 - Runs **read-only, non-root, all capabilities dropped, no-new-privileges**
 
 ## Quick start
@@ -90,10 +90,10 @@ client.chat.completions.create(model="qwen2.5:1.5b", messages=[{"role": "user", 
 
 | Setting | Recommendation |
 |---|---|
-| Model size | 1.5B–8B parameters, 4-bit quantisation (`q4_K_M`) — ~1–5 GB RAM |
-| `OLLAMA_NUM_PARALLEL` | `1` — one request gets all cores; queue the rest |
-| `OLLAMA_MAX_LOADED_MODELS` | `1` — avoid RAM thrashing |
-| `OLLAMA_KEEP_ALIVE` | `30m` or `-1` — skip reload latency |
+| Model size | 1.5B–8B parameters, 4-bit quantisation (`q4_K_M`), about 1 to 5 GB RAM |
+| `OLLAMA_NUM_PARALLEL` | `1`: one request gets all cores; queue the rest |
+| `OLLAMA_MAX_LOADED_MODELS` | `1`: avoid RAM thrashing |
+| `OLLAMA_KEEP_ALIVE` | `30m` or `-1`: skip reload latency |
 | Context (`num_ctx`) | keep at 2–4k unless you need more; memory grows linearly |
 | Threads | Ollama auto-detects physical cores; avoid SMT oversubscription |
 
@@ -117,6 +117,16 @@ Multi-arch (amd64/arm64) images are published to GitHub Container Registry on ev
 docker pull ghcr.io/hoffman-alternative/self-hosted-ai-stack-gateway:latest
 ```
 
+## Limits
+
+- One Ollama instance, one model loaded at a time by default. Concurrent requests queue.
+- Rate limits are in memory per gateway process; restarting the gateway resets them, and running several replicas multiplies them.
+- API keys are static hashes in `.env`. Rotation means editing the file and restarting; there is no key management UI or per-key quota beyond the rate limit.
+- The gateway trusts `X-Forwarded-For` from any peer (`--forwarded-allow-ips *`). That is safe only because it publishes no ports and sits behind Caddy on a private network; do not expose it directly.
+- Open WebUI has its own accounts and security model; review its settings before opening sign-up.
+
+Security notes: [SECURITY.md](SECURITY.md).
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
