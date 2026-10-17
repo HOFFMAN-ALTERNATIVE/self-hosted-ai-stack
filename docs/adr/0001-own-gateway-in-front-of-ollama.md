@@ -19,7 +19,7 @@ the models. Apps still need to call it over HTTPS, with streaming, from outside 
 
 ## Decision
 Option 3. Ollama publishes no ports at all, and the gateway is the only API path in.
-The extra service is small and fully under test.
+The extra service is small and has its own test suite.
 
 ## Consequences
 - `pull`, `delete`, `create`, `copy` and `push` are unreachable from outside.

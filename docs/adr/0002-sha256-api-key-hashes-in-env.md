@@ -11,14 +11,14 @@ including each streamed completion.
 ## Options
 1. Raw keys in `.env`: simplest, and anyone who reads the file or a backup holds
    working keys.
-2. bcrypt or argon2 hashes: right for human passwords, but adds tens of milliseconds
-   per request and protects nothing extra when the key is already random.
+2. bcrypt or argon2 hashes: right for human passwords, but puts a deliberately slow
+   hash on every request and protects nothing extra when the key is already random.
 3. SHA-256 of a key with 32 random bytes (`sk-` plus `token_urlsafe(32)`), stored in
    `API_KEY_HASHES`, compared in constant time.
 
 ## Decision
 Option 3. The keys are generated with high entropy, so a fast hash is enough to make
-a leaked hash useless, and the check costs microseconds.
+a leaked hash useless, and the check adds no noticeable latency.
 
 ## Consequences
 - `python -m app.keygen` prints a key for the client and the hash for `.env`.
