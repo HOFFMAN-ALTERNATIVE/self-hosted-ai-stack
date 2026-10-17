@@ -109,6 +109,14 @@ gateway/           FastAPI gateway + tests + Dockerfile
 scripts/e2e.sh     real end-to-end test used by CI
 ```
 
+## Container image
+
+Multi-arch (amd64/arm64) images are published to GitHub Container Registry on every release:
+
+```bash
+docker pull ghcr.io/hoffman-alternative/self-hosted-ai-stack-gateway:latest
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
