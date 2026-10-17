@@ -117,6 +117,15 @@ Multi-arch (amd64/arm64) images are published to GitHub Container Registry on ev
 docker pull ghcr.io/hoffman-alternative/self-hosted-ai-stack-gateway:latest
 ```
 
+## Design decisions
+
+- [ADR 0001](docs/adr/0001-own-gateway-in-front-of-ollama.md): Ollama publishes no ports.
+  A small FastAPI gateway is the only API path, with auth, limits and allow-lists.
+- [ADR 0002](docs/adr/0002-sha256-api-key-hashes-in-env.md): API keys are random and stored
+  as SHA-256 hashes in `.env`. A slow hash adds nothing for random keys.
+- [ADR 0003](docs/adr/0003-in-process-token-bucket.md): an in-memory token bucket per key,
+  because there is one gateway replica. Redis comes in when there are more.
+
 ## Limits
 
 - One Ollama instance, one model loaded at a time by default. Concurrent requests queue.
